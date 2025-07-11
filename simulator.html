@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>단말기 구매 시뮬레이션</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      padding: 40px;
+      background-color: #f8f9fa;
+    }
+    h2,
+    h3 {
+      margin-top: 20px;
+    }
+    label {
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    canvas {
+      margin-top: 40px;
+    }
+    .form-control {
+      max-width: 200px;
+      display: inline-block;
+    }
+    .section-box {
+      background-color: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      margin-bottom: 30px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2 class="text-center mb-4">📱 단말기 구매비용 시뮬레이터 (5년 기준)</h2>
+
+    <div class="section-box">
+      <h4>자급제 + 알뜰폰</h4>
+      <div class="mb-2">
+        <label>자급제 단말기 가격:</label>
+        <input
+          type="number"
+          id="unlockedPrice"
+          class="form-control"
+          value="1000000"
+        />
+      </div>
+      <div class="mb-2">
+        <label>알뜰폰 월 통신요금:</label>
+        <input
+          type="number"
+          id="mvnoMonthly"
+          class="form-control"
+          value="20000"
+        />
+      </div>
+    </div>
+
+    <div class="section-box">
+      <h4>이통사 번호이동</h4>
+      <div class="mb-2">
+        <label>할부원금:</label>
+        <input type="number" id="carrierPrice" class="form-control" value="800000" />
+      </div>
+      <div class="mb-2">
+        <label>6개월 고가 요금제:</label>
+        <input type="number" id="carrierHighPlan" class="form-control" value="80000" />
+      </div>
+      <div class="mb-2">
+        <label>7~24개월 요금제:</label>
+        <input type="number" id="carrierLowPlan" class="form-control" value="40000" />
+      </div>
+      <div class="mb-2">
+        <label>25개월 이후 요금제 (선택약정 25% 할인 적용):</label>
+        <input
+          type="number"
+          id="carrierDiscountedPlan"
+          class="form-control"
+          value="30000"
+        />
+      </div>
+    </div>
+
+    <div class="section-box">
+      <h4>선택약정 + 비공식 보조금</h4>
+      <div class="mb-2">
+        <label>기기 정가:</label>
+        <input type="number" id="customPrice" class="form-control" value="1000000" />
+      </div>
+      <div class="mb-2">
+        <label>매장 할인(비공식 보조금):</label>
+        <input
+          type="number"
+          id="customDiscount"
+          class="form-control"
+          value="200000"
+        />
+      </div>
+      <div class="mb-2">
+        <label>요금제 원금(할인 전):</label>
+        <input
+          type="number"
+          id="customPlanBefore"
+          class="form-control"
+          value="60000"
+        />
+      </div>
+    </div>
+
+    <div class="mb-3">
+<label>비교할 개월 수 (1 이상):</label>
+<input type="number" id="monthsToCompare" class="form-control" value="60" min="1" />
+
+</div>
+
+    <div class="text-center mb-4">
+      <button class="btn btn-primary" onclick="calculate()">📊 비교하기</button>
+      <button class="btn btn-outline-secondary" onclick="window.print()">
+        🖨 PDF로 출력
+      </button>
+      <button class="btn btn-success" onclick="downloadCSV()">⬇️ CSV 다운로드</button>
+    </div>
+
+    <div id="result" class="table-responsive"></div>
+    <canvas id="costChart" height="100"></canvas>
+  </div>
+
+  <script>
+    function calculate() {
+      const monthsToCompareInput = parseInt(document.getElementById('monthsToCompare').value);
+      const monthsToCompare = (monthsToCompareInput >= 1) ? monthsToCompareInput : 60;
+
+
+      const unlockedPrice = parseInt(document.getElementById("unlockedPrice").value);
+      const mvnoMonthly = parseInt(document.getElementById("mvnoMonthly").value);
+      const carrierPrice = parseInt(document.getElementById("carrierPrice").value);
+      const carrierHighPlan = parseInt(document.getElementById("carrierHighPlan").value);
+      const carrierLowPlan = parseInt(document.getElementById("carrierLowPlan").value);
+      const carrierDiscountedPlan = parseInt(
+        document.getElementById("carrierDiscountedPlan").value
+      );
+
+      const customPrice = parseInt(document.getElementById("customPrice").value);
+      const customDiscount = parseInt(document.getElementById("customDiscount").value);
+      const customPlanBefore = parseInt(
+        document.getElementById("customPlanBefore").value
+      );
+      const customPlanAfter = Math.round(customPlanBefore * 0.75);
+
+      let result =
+        '<table class="table table-bordered table-striped"><thead class="table-light"><tr><th>월</th><th>자급제+알뜰폰</th><th>이통사 번호이동</th><th>선택약정+매장보조금</th><th>가장 유리한 선택</th></tr></thead><tbody>';
+
+      const mvnoTotals = [];
+      const carrierTotals = [];
+      const customTotals = [];
+      const labels = [];
+
+      let mvnoTotal = unlockedPrice;
+      let carrierTotal = carrierPrice;
+      let customTotal = customPrice - customDiscount;
+
+      for (let month = 1; month <= monthsToCompare; month++) {
+        mvnoTotal += mvnoMonthly;
+
+        if (month <= 6) {
+          carrierTotal += carrierHighPlan;
+        } else if (month <= 24) {
+          carrierTotal += carrierLowPlan;
+        } else {
+          carrierTotal += carrierDiscountedPlan;
+        }
+
+        customTotal += customPlanAfter;
+
+        mvnoTotals.push(mvnoTotal);
+        carrierTotals.push(carrierTotal);
+        customTotals.push(customTotal);
+        labels.push(month + "월");
+
+        const minCost = Math.min(mvnoTotal, carrierTotal, customTotal);
+        let best = "자급제+알뜰폰";
+        if (minCost === carrierTotal) best = "이통사 번호이동";
+        else if (minCost === customTotal) best = "선택약정+매장보조금";
+
+        result += `<tr><td>${month}</td>
+          <td>${unlockedPrice.toLocaleString()} + ${(mvnoTotal - unlockedPrice).toLocaleString()} = ${mvnoTotal.toLocaleString()}원</td>
+          <td>${carrierPrice.toLocaleString()} + ${(carrierTotal - carrierPrice).toLocaleString()} = ${carrierTotal.toLocaleString()}원</td>
+          <td>${(customPrice - customDiscount).toLocaleString()} + ${(customTotal - (customPrice - customDiscount)).toLocaleString()} = ${customTotal.toLocaleString()}원</td>
+          <td>${best}</td>
+          </tr>`;
+      }
+
+      result += "</tbody></table>";
+      document.getElementById("result").innerHTML = result;
+
+      const ctx = document.getElementById("costChart").getContext("2d");
+      if (window.costChart) window.costChart.destroy();
+      window.costChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: "자급제+알뜰폰",
+              data: mvnoTotals,
+              borderColor: "blue",
+              backgroundColor: "blue",
+              fill: false,
+              tension: 0.1,
+            },
+            {
+              label: "이통사 번호이동",
+              data: carrierTotals,
+              borderColor: "red",
+              backgroundColor: "red",
+              fill: false,
+              tension: 0.1,
+            },
+            {
+              label: "선택약정+매장보조금",
+              data: customTotals,
+              borderColor: "green",
+              backgroundColor: "green",
+              fill: false,
+              tension: 0.1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: "top" },
+            title: { display: true, text: "5년 누적 비용 비교 (월별)" },
+          },
+        },
+      });
+    }
+
+    function downloadCSV() {
+  const rows = [];
+  // 테이블 헤더
+  const headers = ["월", "자급제+알뜰폰", "이통사 번호이동", "선택약정+매장보조금", "가장 유리한 선택"];
+  rows.push(headers.join(","));
+
+  // 테이블 행 데이터 추출
+  const tableRows = document.querySelectorAll("#result table tbody tr");
+  tableRows.forEach(tr => {
+    const cols = [...tr.querySelectorAll("td")].map(td => `"${td.textContent.trim()}"`);
+    rows.push(cols.join(","));
+  });
+
+  // CSV 텍스트 생성
+
+const csvString = "\uFEFF" + rows.join("\n");
+const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+
+
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "mobile_plan_comparison.csv";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+  </script>
+</body>
+</html>
